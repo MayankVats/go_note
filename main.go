@@ -32,7 +32,7 @@ func main() {
 	// Note handlers
 	router.GET("/notes", handlers.GetNotesHandler)
 	router.POST("/notes", handlers.CreateNoteHandler)
-	router.DELETE("/notes/:id", handlers.DeleteNoteHandler)
+	router.DELETE("/notes", handlers.DeleteNoteHandler)
 
 	router.Run(":3000")
 }
