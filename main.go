@@ -6,6 +6,8 @@ import (
 	"go_note/models"
 	"net/http"
 
+	"go_note/middleware"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,6 +22,8 @@ func main() {
 	db.AutoMigrate(&models.User{}, &models.Note{}, &models.Session{})
 
 	router := gin.Default()
+
+	router.Use(middleware.Cors())
 
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, "notes app backend-service")
