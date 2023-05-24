@@ -4,13 +4,16 @@ import (
 	"go_note/database"
 	"go_note/models"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func SignupHandler(c *gin.Context) {
 	var requestBody struct {
 		Username string `json:"username"`
+		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
 	if err := c.ShouldBindJSON(&requestBody); err != nil {
@@ -25,9 +28,11 @@ func SignupHandler(c *gin.Context) {
 		return
 	}
 
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(requestBody.Password), 14)
 	newUser := models.User{
 		Username: requestBody.Username,
-		Password: requestBody.Password,
+		Email:    requestBody.Email,
+		Password: string(hashedPassword),
 	}
 
 	result := db.Create(&newUser)
@@ -42,7 +47,7 @@ func SignupHandler(c *gin.Context) {
 func LoginHandler(c *gin.Context) {
 	// Parse request body to get username and password
 	var requestBody struct {
-		Username string `json:"username"`
+		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
 	if err := c.ShouldBindJSON(&requestBody); err != nil {
@@ -58,18 +63,25 @@ func LoginHandler(c *gin.Context) {
 	}
 
 	var user models.User
-	result := db.Where("username = ?", requestBody.Username).First(&user)
+	result := db.Where("email = ?", requestBody.Email).First(&user)
 	if result.Error != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
 	// Verify the password
-	if user.Password != requestBody.Password {
+	compareErr := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(requestBody.Password))
+
+	if compareErr != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Login successful"})
+	session, err := CreateSession(user.ID, time.Now().Add(24*time.Hour), db)
 
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"sid": session.ID})
 }

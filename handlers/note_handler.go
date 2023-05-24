@@ -4,11 +4,21 @@ import (
 	"go_note/database"
 	"go_note/models"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 func GetNotesHandler(c *gin.Context) {
+	var requestBody struct {
+		Sid string `json:"sid"`
+	}
+
+	if err := c.ShouldBindJSON(&requestBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Request Body"})
+		return
+	}
+
 	// Fetch all notes from the database
 	db, err := database.SetupDatabase()
 	if err != nil {
@@ -16,10 +26,27 @@ func GetNotesHandler(c *gin.Context) {
 		return
 	}
 
-	var notes []models.Note
-	result := db.Find(&notes)
+	var session models.Session
+	sessionResult := db.Where("id = ?", requestBody.Sid).First(&session)
+	if sessionResult.Error != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authorized"})
+		return
+	}
+
+	if session.ExpiresAt.Before(time.Now()) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authorized"})
+		return
+	}
+
+	type Note struct {
+		ID   uint32
+		Note string
+	}
+	var notes []Note
+
+	result := db.Where("user_id = ?", session.UserID).Find(&notes)
 	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notes"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
 		return
 	}
 
@@ -29,8 +56,8 @@ func GetNotesHandler(c *gin.Context) {
 func CreateNoteHandler(c *gin.Context) {
 	// Parse request body to get note details
 	var requestBody struct {
-		Title   string `json:"title"`
-		Content string `json:"content"`
+		Sid  string `json:"sid"`
+		Note string `json:"note"`
 	}
 	if err := c.ShouldBindJSON(&requestBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
@@ -44,9 +71,21 @@ func CreateNoteHandler(c *gin.Context) {
 		return
 	}
 
+	var session models.Session
+	sessionResult := db.Where("id = ?", requestBody.Sid).First(&session)
+	if sessionResult.Error != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authorized"})
+		return
+	}
+
+	if session.ExpiresAt.Before(time.Now()) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authorized"})
+		return
+	}
+
 	newNote := models.Note{
-		Title:   requestBody.Title,
-		Content: requestBody.Content,
+		UserID: session.UserID,
+		Note:   requestBody.Note,
 	}
 	result := db.Create(&newNote)
 	if result.Error != nil {
@@ -54,12 +93,18 @@ func CreateNoteHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Note created successfully"})
+	c.JSON(http.StatusOK, gin.H{"id": newNote.ID})
 }
 
 func DeleteNoteHandler(c *gin.Context) {
-	// Get the note ID from the URL parameter
-	noteID := c.Param("id")
+	var requestBody struct {
+		Sid    string `json:"sid"`
+		NoteID uint32 `json:"id"`
+	}
+	if err := c.ShouldBindJSON(&requestBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
 
 	// Delete the note from the database
 	db, err := database.SetupDatabase()
@@ -68,7 +113,19 @@ func DeleteNoteHandler(c *gin.Context) {
 		return
 	}
 
-	result := db.Delete(&models.Note{}, noteID)
+	var session models.Session
+	sessionResult := db.Where("id = ?", requestBody.Sid).First(&session)
+	if sessionResult.Error != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authorized"})
+		return
+	}
+
+	if session.ExpiresAt.Before(time.Now()) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authorized"})
+		return
+	}
+
+	result := db.Unscoped().Delete(&models.Note{}, requestBody.NoteID)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete note"})
 		return

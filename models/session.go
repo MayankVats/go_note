@@ -6,10 +6,11 @@ import (
 	"gorm.io/gorm"
 )
 
-type Note struct {
+type Session struct {
 	gorm.Model
-	UserID    uint
-	Note      string
+	ID        string    `gorm:"primaryKey"`
+	UserID    uint      `gorm:"not null"`
+	ExpiresAt time.Time `gorm:"not null"`
 	CreatedAt time.Time `gorm:"autoCreateTime"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime"`
 }

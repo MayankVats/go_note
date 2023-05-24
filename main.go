@@ -17,7 +17,7 @@ func main() {
 	}
 
 	// Auto-migrate the models
-	db.AutoMigrate(&models.User{}, &models.Note{})
+	db.AutoMigrate(&models.User{}, &models.Note{}, &models.Session{})
 
 	router := gin.Default()
 
